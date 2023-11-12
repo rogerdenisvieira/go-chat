@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"errors"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -19,40 +21,50 @@ var (
 
 func main() {
 
-	log.Printf("starting the listening at %s:%s", HOSTNAME, PORT)
+	log.Printf("starting listening at %s:%s", HOSTNAME, PORT)
 	listener, err := net.Listen(TYPE, HOSTNAME+":"+PORT)
 
 	if err != nil {
 		panic("server cannot start...")
 	}
-
-	connection, err := listener.Accept()
-	defer connection.Close()
-
-	if err != nil {
-		panic("cannot accept new connections")
-	}
-
 	log.Print("server started")
 
-	wg.Add(1)
-	go receive(connection)
+	for {
 
-	wg.Wait()
-	log.Print("server stopped")
+		connection, err := listener.Accept()
+		defer connection.Close()
+
+		if err != nil {
+			log.Print(err)
+		}
+
+		go handleConnection(connection)
+
+	}
 }
 
-func receive(connection net.Conn) {
+func handleConnection(connection net.Conn) {
+	log.Printf("connected to %s", connection.RemoteAddr())
 	bufferedReader := bufio.NewReader(connection)
-	defer wg.Done()
+
+	defer connection.Close()
 
 	for {
+
 		str, err := bufferedReader.ReadString('\n')
+
 		if err != nil {
-			connection.Close()
-			panic(err)
+
+			if errors.Is(err, io.EOF) {
+				log.Printf("client %s disconnected", connection.RemoteAddr())
+				return
+			}
+
+			log.Print(err)
+			return
 		}
 
 		log.Println(str)
+
 	}
 }
